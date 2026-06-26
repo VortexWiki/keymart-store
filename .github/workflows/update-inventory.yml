@@ -1,10 +1,9 @@
-
 name: Update Inventory
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # chaque jour à 6h UTC
-  workflow_dispatch:       # permet de lancer manuellement
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 jobs:
   update:
@@ -25,6 +24,13 @@ jobs:
           RO_USERNAME: ${{ secrets.RO_USERNAME }}
           RO_PASSWORD: ${{ secrets.RO_PASSWORD }}
         run: node scraper.js
+
+      - name: Upload debug screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: debug-login.png
 
       - name: Commit and push
         run: |
