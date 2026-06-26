@@ -291,4 +291,69 @@ async function run() {
         await itemPage.goto("https://sovereignro.com/?module=item&action=view&id=" + item.id, { waitUntil: 'networkidle2' });
         const type = await itemPage.evaluate(() => {
           const th = [...document.querySelectorAll("th")].find(x => x.textContent.trim() === "Type");
-          return th?.nextElementSibling?.textContent.trim
+          return th?.nextElementSibling?.textContent.trim() ?? null;
+        });
+        await itemPage.close();
+        results[i] = normalizeType(type);
+      } catch(e) {
+        results[i] = "Unknown";
+      }
+      if ((i + 1) % 10 === 0) console.log((i + 1) + "/" + items.length + "...");
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  await browser.close();
+
+  const groups = {};
+  for (let i = 0; i < items.length; i++) {
+    const type = results[i];
+    if (!groups[type]) groups[type] = [];
+    groups[type].push({ ...items[i], icon: "https://sovereignro.com/" + items[i].id + ".png" });
+  }
+
+  const sortedCategories = Object.keys(groups).sort();
+  for (const cat of sortedCategories) {
+    groups[cat].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-CA", {
+    year: "numeric", month: "long", day: "numeric",
+    hour: "2-digit", minute: "2-digit"
+  });
+  const nowMs = now.getTime();
+  const totalItems = items.length;
+
+  let tableRows = "";
+  for (const cat of sortedCategories) {
+    tableRows += '<tr class="category-header" data-cat="' + cat + '"><td colspan="6">' + cat + '</td></tr>';
+    for (const item of groups[cat]) {
+      const qtyClass = item.qty > 1 ? "qty-green" : "qty-gray";
+      const safeName = item.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+      tableRows += '<tr class="item-row" data-name="' + item.name.toLowerCase() + '" data-cat="' + cat + '">';
+      tableRows += '<td class="td-check"><input type="checkbox" class="item-check" data-id="' + item.id + '" data-name="' + item.name + '" data-qty="' + item.qty + '"></td>';
+      tableRows += '<td class="td-icon"><img src="' + item.icon + '" alt="' + item.name + '" class="item-icon" onerror="this.style.display=\'none\'"></td>';
+      tableRows += '<td class="td-name"><a href="https://sovereignro.com/?module=item&action=view&id=' + item.id + '" target="_blank">' + item.name + '</a></td>';
+      tableRows += '<td class="td-qty"><span class="qty-badge ' + qtyClass + '">x' + item.qty + '</span></td>';
+      tableRows += '<td class="td-spinner"><div class="spinner">';
+      tableRows += '<button class="spin-btn" onclick="changeQty(\'' + item.id + '\', -1)">-</button>';
+      tableRows += '<span class="spin-val" id="spin-' + item.id + '">1</span>';
+      tableRows += '<button class="spin-btn" onclick="changeQty(\'' + item.id + '\', 1, ' + item.qty + ')">+</button>';
+      tableRows += '</div></td>';
+      tableRows += '<td class="td-offer"><input type="text" class="offer-input" placeholder="offer / total (z)" data-id="' + item.id + '"></td>';
+      tableRows += '<td class="td-copy"><button class="copy-btn" onclick="copyItem(\'' + item.id + '\',\'' + safeName + '\',' + item.qty + ')">Copy</button></td>';
+      tableRows += '</tr>';
+    }
+  }
+
+  const filterButtons = sortedCategories.map(cat =>
+    '<button class="filter-btn" onclick="filterCat(\'' + cat + '\', this)">' + cat + '</button>'
+  ).join('');
+
+  const html = buildHTML(dateStr, nowMs, totalItems, tableRows, filterButtons);
+  fs.writeFileSync('index.html', html);
+  console.log("index.html generated successfully!");
+}
+
+run().catch(console.error);
